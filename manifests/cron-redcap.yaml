@@ -1,0 +1,23 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: php-app-cronjob
+  namespace: default
+spec:
+  schedule: "0 0 * * *"  # Runs daily at midnight
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: php-cronjob
+            image: php:8.0-cli
+            command: ["/bin/sh", "-c", "php /var/www/html/script.php"]
+          restartPolicy: OnFailure
+
+
+# RUN sed -i -e '/pam_loginuid.so/s/^/#/' /etc/pam.d/cron && \
+#     chmod 0644 /etc/crontab && \
+#     echo "* * * * * /usr/local/bin/php /var/www/html/redcap/cron.php >> /tmp/cron.log 2>&1" >> /etc/cron.d/redcap-cron && \
+#     crontab -u apache /etc/cron.d/redcap-cron && \
+#     chmod u+s /usr/sbin/cron

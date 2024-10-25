@@ -1,0 +1,47 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dep-redcap-web
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rc-web
+  template:
+    metadata:
+      labels:
+        app: rc-web
+    spec:
+      securityContext:
+        runAsUser: 48
+        runAsGroup: 48
+      containers:
+      - name: rc-web
+        image: redcap-dev:5000/rc-test:v2
+        ports:
+        - containerPort: 8080
+        volumeMounts:
+        - name: redcap-configs
+          mountPath: /etc/msmtprc
+          subPath: msmtprc
+        - name: redcap-configs
+          mountPath: /var/www/html/redcap/info.php
+          subPath: info.php
+          readOnly: true
+        - name: redcap-configs
+          mountPath: /var/www/html/redcap/database.php
+          subPath: database.php
+          readOnly: true
+        - name: redcap-configs
+          mountPath: /var/www/html/redcap/install.php
+          subPath: install.php
+          readOnly: true
+        - name: redcap-storage
+          mountPath: /config
+      volumes:
+      - name: redcap-configs
+        configMap:
+          name: cm-rc-web
+      - name: redcap-storage
+        emptyDir: {}

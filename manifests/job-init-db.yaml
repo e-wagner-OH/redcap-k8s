@@ -1,0 +1,29 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: job-init-redcap-db
+  namespace: default
+spec:
+  completions: 1  # The Job only needs to complete successfully once
+  backoffLimit: 3  # If the Job fails, it will retry up to 3 times
+  template:
+    spec:
+      containers:
+      - name: sql-script-runner
+        image: mariadb:10.5
+        env:
+          - name: MARIADB_ROOT_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: mariadb-secret
+                key: password
+        volumeMounts:
+          - name: cm-mariadb
+            mountPath: /tmp/init-redcap-db.sql
+            subPath: init_redcap_db.sql
+        command: ["/bin/sh", "-c", "sleep 20 && mysql -h mariadb-service -u root -p${MARIADB_ROOT_PASSWORD} < /tmp/init-redcap-db.sql && echo 'Script completed'"]
+      restartPolicy: OnFailure
+      volumes:
+      - name: cm-mariadb
+        configMap:
+          name: cm-rc-web
