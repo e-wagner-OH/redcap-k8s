@@ -1,0 +1,29 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: redcap-ingress
+  namespace: default
+  annotations:
+    # Use these annotations if you're using Traefik
+    traefik.ingress.kubernetes.io/router.entrypoints: web
+    kubernetes.io/ingress.class: traefik
+    # traefik.ingress.kubernetes.io/router.middlewares: default-mailhog-strip-prefix@kubernetescrd,default-mailhog-add-prefix@kubernetescrd
+spec:
+  rules:
+  - host: redcap.local
+    http:
+      paths:
+      - path: /redcap
+        pathType: Prefix
+        backend:
+          service:
+            name: svc-rc-web
+            port:
+              number: 80
+      - path: /adminer
+        pathType: Prefix
+        backend:
+          service:
+            name: adminer-service
+            port:
+              number: 8080

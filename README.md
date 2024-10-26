@@ -5,6 +5,10 @@ If you need to use a local image, you have to import it into your k3d cluster re
 ```bash
 k3d cluster create derp --registry-create redcap-dev
 
+k3d cluster create derp --port "80:80@loadbalancer" --port "443:443@loadbalancer" --registry-create redcap-dev
+
+
+
 ```
 
 Now we can push to the this local k3d repo. Use the localhost and published port. Will need to check that with the docker ps command.
@@ -13,21 +17,14 @@ Now we can push to the this local k3d repo. Use the localhost and published port
 # get port published
  docker ps -f name=redcap-dev
 
-# now change port published and use in the  next commands
+ 6e109fb9221c   registry:2                       "/entrypoint.sh /etc…"   About an hour ago   Up About an hour   0.0.0.0:50030->5000/tcp                                             redcap-dev
 
-docker tag rc-test:latest localhost:58823/rc-test:latest
-docker push  localhost:58823/rc-test:latest
+# now change port published (port 50030) and use in the  next commands
+
+docker tag rc-test:latest localhost:50030/rc-test:tag
+docker push  localhost:50030/rc-test:tag
 ```
 
-
-
-```bash
-# get clusters you are testing against
-k3d cluster list
-
-# use cluster to import image
-k3d image import my-local-image:latest -c <cluster-name>
-```
 
 Would also need to update the image in the deployment
 
@@ -37,3 +34,13 @@ spec:
         image: redcap-dev:5000/rc-test:latest
 
 ```
+
+## host files updates
+
+need to add some lines to your hosts files.
+
+```bash
+127.0.0.1   redcap.local
+127.0.0.1   mailhog.local
+```
+

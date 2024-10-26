@@ -8,11 +8,11 @@ spec:
     - name: debug-container
       image: busybox
       command: ["sleep", "120"]  # Keeps the pod running for debugging
-      volumeMounts:
-        - name: init-scripts
-          mountPath: /docker-entrypoint-initdb.d/init-redcap-db.sql
-          subPath: init_redcap_db.sql
-  volumes:
-    - name: init-scripts
-      configMap:
-        name: cm-rc-web
+      # volumeMounts:
+      #   - name: init-scripts
+      #     mountPath: /docker-entrypoint-initdb.d/init-redcap-db.sql
+      #     subPath: init_redcap_db.sql
+  # volumes:
+  #   - name: init-scripts
+  #     configMap:
+  #       name: cm-rc-web
