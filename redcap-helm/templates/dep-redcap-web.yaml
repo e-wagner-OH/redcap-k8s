@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-redcap
+  namespace: {{ .Release.Namespace }}
+  labels: 
+    app.kubernetes.io/name: redcap
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: redcap
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: redcap
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      securityContext:
+        runAsUser: {{ .Values.securityContext.runAsUser }}
+        runAsGroup: {{ .Values.securityContext.runAsGroup }}
+      containers:
+        - name: {{ .Values.container.name }}
+          image: {{ .Values.container.image }}
+          ports:
+            - containerPort: {{ .Values.container.port }}
+          volumeMounts:
+            - name: redcap-configs
+              mountPath: /etc/msmtprc
+              subPath: msmtprc
+            - name: redcap-configs
+              mountPath: /var/www/html/redcap/info.php
+              subPath: info.php
+              readOnly: true
+            - name: redcap-configs
+              mountPath: /var/www/html/redcap/database.php
+              subPath: database.php
+              readOnly: true
+      volumes:
+        - name: redcap-configs
+          configMap:
+            name: {{ .Release.Name }}-rc  # Update to match the templated ConfigMap name

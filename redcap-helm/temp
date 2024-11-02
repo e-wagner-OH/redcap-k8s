@@ -1,0 +1,1280 @@
+NAME: redcap-test
+LAST DEPLOYED: Sat Nov  2 11:50:57 2024
+NAMESPACE: default
+STATUS: deployed
+REVISION: 1
+TEST SUITE: None
+USER-SUPPLIED VALUES:
+{}
+
+COMPUTED VALUES:
+adminer:
+  containerPort: 8080
+  enabled: true
+  image: adminer:latest
+  ingress:
+    host: adminer.local
+  replicaCount: 1
+  servicePort: 8080
+config:
+  database_php: |
+    <?php
+    global $log_all_errors;
+    $log_all_errors = {{ if .Values.config.logErrors }}TRUE{{ else }}FALSE{{ end }};
+
+    $hostname   = "{{ .Values.mariadb.primary.service.name | default (printf "%s-mariadb" .Release.Name) }}";
+    $db         = "{{ .Values.mariadb.auth.database | default "redcap" }}";
+    $username   = "{{ .Values.mariadb.auth.username | default "redcap_user" }}";
+    $password   = "{{ .Values.mariadb.auth.password | default "password" }}";
+
+    $salt = "{{ .Values.mariadb.salt | default "kwgHjqknvx8Ctcvz" }}";
+    ?>
+  info_php: |
+    <?php
+      phpinfo();
+    ?>
+  logErrors: false
+  msmtprc: |
+    # Mailhog localhsot settings
+    {{- if and (not .Values.email.enabled) .Values.mailhog.enabled }}
+    account default
+    host {{ .Release.Name }}-mailhog-service
+    port {{ .Values.mailhog.service.ports.email.port }}
+    from {{ .Values.email.from | default "redcap@redcap.local" }}
+    tls {{ .Values.email.tls | default "off" }}
+    tls_starttls {{ .Values.email.tls_starttls | default "off" }}
+    logfile /var/log/msmtp.log
+    # cloud/ k8s/ no mailhog settings
+    {{- else if and .Values.email.enabled (not .Values.mailhog.enabled) }}
+    account default
+    host {{ .Values.email.host | default "smtp.example.com" }}
+    port {{ .Values.email.port | default 587 }}
+    from {{ .Values.email.from | default "redcap@redcap.local" }}
+    tls {{ .Values.email.tls | default "on" }}
+    tls_starttls {{ .Values.email.tls_starttls | default "on" }}
+    logfile /var/log/msmtp.log
+    {{- end }}
+  msmtprc_ini: |
+    sendmail_path = "/usr/bin/msmtp -C /etc/msmtprc -t"
+configMapName: cm-rc-web
+container:
+  image: redcap-dev:5000/rc-test:v2
+  name: rc-web
+  port: 8080
+cronjob:
+  enabled: true
+  failedJobsHistoryLimit: 1
+  image: curlimages/curl:latest
+  schedule: '*/5 * * * *'
+  successfulJobsHistoryLimit: 3
+debug:
+  args:
+  - -c
+  - while true; do ping localhost; sleep 60; done
+  command:
+  - /bin/bash
+  enabled: true
+  image: nicolaka/netshoot
+email:
+  enabled: false
+  from: eric@{{ .Release.Name }}.local
+  host: '{{ .Release.Name }}.local'
+  port: 587
+  tls: false
+  tls_starttls: false
+ingress:
+  enabled: true
+  host: redcap.local
+mailhog:
+  enabled: true
+  image: mailhog/mailhog:latest
+  ingress:
+    host: mailhog.local
+  replicas: 1
+  service:
+    ports:
+      email:
+        port: 1025
+        targetPort: 1025
+      web:
+        port: 8025
+        targetPort: 8025
+    type: ClusterIP
+mariadb:
+  architecture: standalone
+  auth:
+    customPasswordFiles: {}
+    database: redcap
+    existingSecret: ""
+    forcePassword: false
+    password: password
+    replicationPassword: ""
+    replicationUser: replicator
+    rootPassword: password
+    usePasswordFiles: false
+    username: redcap_user
+  clusterDomain: cluster.local
+  common:
+    exampleValue: common-chart
+    global:
+      compatibility:
+        openshift:
+          adaptSecurityContext: auto
+      defaultStorageClass: ""
+      imagePullSecrets: []
+      imageRegistry: ""
+      storageClass: ""
+  commonAnnotations: {}
+  commonLabels: {}
+  diagnosticMode:
+    args:
+    - infinity
+    command:
+    - sleep
+    enabled: false
+  enabled: true
+  extraDeploy: []
+  fullnameOverride: ""
+  global:
+    compatibility:
+      openshift:
+        adaptSecurityContext: auto
+    defaultStorageClass: ""
+    imagePullSecrets: []
+    imageRegistry: ""
+    storageClass: ""
+  image:
+    debug: false
+    digest: ""
+    pullPolicy: IfNotPresent
+    pullSecrets: []
+    registry: docker.io
+    repository: bitnami/mariadb
+    tag: 11.4.3-debian-12-r1
+  initdbScripts:
+    redcap-db-init.sh: |
+      #!/bin/sh
+      if [[ $(hostname) == *primary* ]]; then
+        echo "Primary node"
+        mysql -P 3306 -uroot -p"${MARIADB_ROOT_PASSWORD}" -e "CREATE DATABASE IF NOT EXISTS \`${MARIADB_DATABASE}\`; \
+        CREATE USER IF NOT EXISTS '${MARIADB_USER}'@'%' IDENTIFIED BY '${MARIADB_PASSWORD}'; \
+        GRANT SELECT, INSERT, UPDATE, DELETE ON \`${MARIADB_DATABASE}\`.* TO '${MARIADB_USER}'@'%'; \
+        FLUSH PRIVILEGES;";
+      else
+        echo "No primary node"
+      fi
+  initdbScriptsConfigMap: ""
+  kubeVersion: ""
+  metrics:
+    annotations:
+      prometheus.io/port: "9104"
+      prometheus.io/scrape: "true"
+    containerPorts:
+      http: 9104
+    containerSecurityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+        - ALL
+      enabled: false
+      privileged: false
+      readOnlyRootFilesystem: true
+      runAsGroup: 1001
+      runAsNonRoot: true
+      runAsUser: 1001
+      seLinuxOptions: {}
+      seccompProfile:
+        type: RuntimeDefault
+    enabled: false
+    extraArgs:
+      primary: []
+      secondary: []
+    extraVolumeMounts:
+      primary: []
+      secondary: []
+    image:
+      digest: ""
+      pullPolicy: IfNotPresent
+      pullSecrets: []
+      registry: docker.io
+      repository: bitnami/mysqld-exporter
+      tag: 0.15.1-debian-12-r34
+    livenessProbe:
+      enabled: true
+      failureThreshold: 3
+      initialDelaySeconds: 120
+      periodSeconds: 10
+      successThreshold: 1
+      timeoutSeconds: 1
+    prometheusRule:
+      additionalLabels: {}
+      enabled: false
+      namespace: ""
+      rules: []
+    readinessProbe:
+      enabled: true
+      failureThreshold: 3
+      initialDelaySeconds: 30
+      periodSeconds: 10
+      successThreshold: 1
+      timeoutSeconds: 1
+    resources: {}
+    resourcesPreset: nano
+    serviceMonitor:
+      enabled: false
+      honorLabels: false
+      interval: 30s
+      jobLabel: ""
+      labels: {}
+      metricRelabelings: []
+      namespace: ""
+      relabelings: []
+      scrapeTimeout: ""
+      selector: {}
+  nameOverride: ""
+  networkPolicy:
+    allowExternal: true
+    allowExternalEgress: true
+    enabled: true
+    extraEgress: []
+    extraIngress: []
+    ingressNSMatchLabels: {}
+    ingressNSPodMatchLabels: {}
+  primary:
+    affinity: {}
+    args: []
+    automountServiceAccountToken: false
+    command: []
+    configuration: |-
+      [mysqld]
+      skip-name-resolve
+      explicit_defaults_for_timestamp
+      basedir=/opt/bitnami/mariadb
+      datadir=/bitnami/mariadb/data
+      plugin_dir=/opt/bitnami/mariadb/plugin
+      port={{ .Values.primary.containerPorts.mysql }}
+      socket=/opt/bitnami/mariadb/tmp/mysql.sock
+      tmpdir=/opt/bitnami/mariadb/tmp
+      max_allowed_packet=16M
+      bind-address=*
+      pid-file=/opt/bitnami/mariadb/tmp/mysqld.pid
+      log-error=/opt/bitnami/mariadb/logs/mysqld.log
+      character-set-server=UTF8
+      collation-server=utf8_general_ci
+      slow_query_log=0
+      long_query_time=10.0
+      binlog_expire_logs_seconds=2592000
+
+      [client]
+      port=3306
+      socket=/opt/bitnami/mariadb/tmp/mysql.sock
+      default-character-set=UTF8
+      plugin_dir=/opt/bitnami/mariadb/plugin
+
+      [manager]
+      port=3306
+      socket=/opt/bitnami/mariadb/tmp/mysql.sock
+      pid-file=/opt/bitnami/mariadb/tmp/mysqld.pid
+    containerPorts:
+      mysql: 3306
+    containerSecurityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+        - ALL
+      enabled: true
+      privileged: false
+      readOnlyRootFilesystem: true
+      runAsGroup: 1001
+      runAsNonRoot: true
+      runAsUser: 1001
+      seLinuxOptions: {}
+      seccompProfile:
+        type: RuntimeDefault
+    customLivenessProbe: {}
+    customReadinessProbe: {}
+    customStartupProbe: {}
+    existingConfigmap: ""
+    extraEnvVars: []
+    extraEnvVarsCM: ""
+    extraEnvVarsSecret: ""
+    extraFlags: ""
+    extraVolumeMounts: []
+    extraVolumes: []
+    hostAliases: []
+    image:
+      registry: docker.io
+      repository: mariadb
+      tag: 10.5
+    initContainers: []
+    lifecycleHooks: {}
+    livenessProbe:
+      enabled: true
+      failureThreshold: 3
+      initialDelaySeconds: 120
+      periodSeconds: 10
+      successThreshold: 1
+      timeoutSeconds: 1
+    name: primary
+    nodeAffinityPreset:
+      key: ""
+      type: ""
+      values: []
+    nodeSelector: {}
+    pdb:
+      create: true
+      maxUnavailable: ""
+      minAvailable: ""
+    persistence:
+      accessModes:
+      - ReadWriteOnce
+      annotations: {}
+      enabled: true
+      existingClaim: ""
+      labels: {}
+      selector: {}
+      size: 10Gi
+      storageClass: ""
+      subPath: ""
+    podAffinityPreset: ""
+    podAnnotations: {}
+    podAntiAffinityPreset: soft
+    podLabels: {}
+    podManagementPolicy: ""
+    podSecurityContext:
+      enabled: true
+      fsGroup: 1001
+      fsGroupChangePolicy: Always
+      supplementalGroups: []
+      sysctls: []
+    priorityClassName: ""
+    readinessProbe:
+      enabled: true
+      failureThreshold: 3
+      initialDelaySeconds: 10
+      periodSeconds: 5
+      successThreshold: 1
+      timeoutSeconds: 1
+    resources: {}
+    resourcesPreset: micro
+    revisionHistoryLimit: 10
+    rollingUpdatePartition: ""
+    runtimeClassName: ""
+    schedulerName: ""
+    service:
+      annotations: {}
+      clusterIP: ""
+      externalTrafficPolicy: Cluster
+      extraPorts: []
+      loadBalancerIP: ""
+      loadBalancerSourceRanges: []
+      nodePorts:
+        mysql: ""
+      ports:
+        metrics: 9104
+        mysql: 3306
+      sessionAffinity: None
+      sessionAffinityConfig: {}
+      type: ClusterIP
+    sidecars: []
+    startupProbe:
+      enabled: false
+      failureThreshold: 10
+      initialDelaySeconds: 120
+      periodSeconds: 15
+      successThreshold: 1
+      timeoutSeconds: 5
+    startupWaitOptions: {}
+    tolerations: []
+    topologySpreadConstraints: []
+    updateStrategy:
+      type: RollingUpdate
+  rbac:
+    create: false
+  runtimeClassName: ""
+  salt: kwgHjqknvx8Ctcvz
+  schedulerName: ""
+  secondary:
+    affinity: {}
+    args: []
+    automountServiceAccountToken: false
+    command: []
+    configuration: |-
+      [mysqld]
+      skip-name-resolve
+      explicit_defaults_for_timestamp
+      basedir=/opt/bitnami/mariadb
+      datadir=/bitnami/mariadb/data
+      port={{ .Values.secondary.containerPorts.mysql }}
+      socket=/opt/bitnami/mariadb/tmp/mysql.sock
+      tmpdir=/opt/bitnami/mariadb/tmp
+      max_allowed_packet=16M
+      bind-address=0.0.0.0
+      pid-file=/opt/bitnami/mariadb/tmp/mysqld.pid
+      log-error=/opt/bitnami/mariadb/logs/mysqld.log
+      character-set-server=UTF8
+      collation-server=utf8_general_ci
+      slow_query_log=0
+      long_query_time=10.0
+      binlog_expire_logs_seconds=2592000
+
+      [client]
+      port=3306
+      socket=/opt/bitnami/mariadb/tmp/mysql.sock
+      default-character-set=UTF8
+
+      [manager]
+      port=3306
+      socket=/opt/bitnami/mariadb/tmp/mysql.sock
+      pid-file=/opt/bitnami/mariadb/tmp/mysqld.pid
+    containerPorts:
+      mysql: 3306
+    containerSecurityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+        - ALL
+      enabled: true
+      privileged: false
+      readOnlyRootFilesystem: true
+      runAsGroup: 1001
+      runAsNonRoot: true
+      runAsUser: 1001
+      seLinuxOptions: {}
+      seccompProfile:
+        type: RuntimeDefault
+    customLivenessProbe: {}
+    customReadinessProbe: {}
+    customStartupProbe: {}
+    existingConfigmap: ""
+    extraEnvVars: []
+    extraEnvVarsCM: ""
+    extraEnvVarsSecret: ""
+    extraFlags: ""
+    extraVolumeMounts: []
+    extraVolumes: []
+    hostAliases: []
+    initContainers: []
+    lifecycleHooks: {}
+    livenessProbe:
+      enabled: true
+      failureThreshold: 3
+      initialDelaySeconds: 120
+      periodSeconds: 10
+      successThreshold: 1
+      timeoutSeconds: 1
+    name: secondary
+    nodeAffinityPreset:
+      key: ""
+      type: ""
+      values: []
+    nodeSelector: {}
+    pdb:
+      create: true
+      maxUnavailable: ""
+      minAvailable: ""
+    persistence:
+      accessModes:
+      - ReadWriteOnce
+      annotations: {}
+      enabled: true
+      labels: {}
+      selector: {}
+      size: 8Gi
+      storageClass: ""
+      subPath: ""
+    podAffinityPreset: ""
+    podAnnotations: {}
+    podAntiAffinityPreset: soft
+    podLabels: {}
+    podManagementPolicy: ""
+    podSecurityContext:
+      enabled: true
+      fsGroup: 1001
+      fsGroupChangePolicy: Always
+      supplementalGroups: []
+      sysctls: []
+    priorityClassName: ""
+    readinessProbe:
+      enabled: true
+      failureThreshold: 3
+      initialDelaySeconds: 30
+      periodSeconds: 10
+      successThreshold: 1
+      timeoutSeconds: 1
+    replicaCount: 1
+    resources: {}
+    resourcesPreset: micro
+    revisionHistoryLimit: 10
+    rollingUpdatePartition: ""
+    runtimeClassName: ""
+    schedulerName: ""
+    service:
+      annotations: {}
+      clusterIP: ""
+      externalTrafficPolicy: Cluster
+      extraPorts: []
+      loadBalancerIP: ""
+      loadBalancerSourceRanges: []
+      nodePorts:
+        mysql: ""
+      ports:
+        metrics: 9104
+        mysql: 3306
+      sessionAffinity: None
+      sessionAffinityConfig: {}
+      type: ClusterIP
+    sidecars: []
+    startupProbe:
+      enabled: false
+      failureThreshold: 10
+      initialDelaySeconds: 120
+      periodSeconds: 15
+      successThreshold: 1
+      timeoutSeconds: 5
+    startupWaitOptions: {}
+    tolerations: []
+    topologySpreadConstraints: []
+    updateStrategy:
+      type: RollingUpdate
+  serviceAccount:
+    annotations: {}
+    automountServiceAccountToken: false
+    create: true
+    name: ""
+  serviceBindings:
+    enabled: false
+  volumePermissions:
+    enabled: false
+    image:
+      digest: ""
+      pullPolicy: IfNotPresent
+      pullSecrets: []
+      registry: docker.io
+      repository: bitnami/os-shell
+      tag: 12-debian-12-r30
+    resources: {}
+    resourcesPreset: nano
+replicaCount: 1
+securityContext:
+  runAsGroup: 48
+  runAsUser: 48
+service:
+  port: 80
+  type: ClusterIP
+
+HOOKS:
+MANIFEST:
+---
+# Source: redcap-helm/charts/mariadb/templates/networkpolicy.yaml
+kind: NetworkPolicy
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: redcap-test-mariadb
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: redcap-test
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: mariadb
+    app.kubernetes.io/version: 11.4.3
+    helm.sh/chart: mariadb-19.1.0
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: redcap-test
+      app.kubernetes.io/managed-by: Helm
+      app.kubernetes.io/name: mariadb
+      app.kubernetes.io/version: 11.4.3
+      helm.sh/chart: mariadb-19.1.0
+  policyTypes:
+    - Ingress
+    - Egress
+  egress:
+    - {}
+  ingress:
+    - ports:
+        - port: 3306
+        - port: 3306
+---
+# Source: redcap-helm/charts/mariadb/templates/primary/pdb.yaml
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: redcap-test-mariadb
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: redcap-test
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: mariadb
+    app.kubernetes.io/version: 11.4.3
+    helm.sh/chart: mariadb-19.1.0
+    app.kubernetes.io/component: primary
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: redcap-test
+      app.kubernetes.io/name: mariadb
+      app.kubernetes.io/component: primary
+---
+# Source: redcap-helm/charts/mariadb/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: redcap-test-mariadb
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: redcap-test
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: mariadb
+    app.kubernetes.io/version: 11.4.3
+    helm.sh/chart: mariadb-19.1.0
+automountServiceAccountToken: false
+---
+# Source: redcap-helm/charts/mariadb/templates/secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: redcap-test-mariadb
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: redcap-test
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: mariadb
+    app.kubernetes.io/version: 11.4.3
+    helm.sh/chart: mariadb-19.1.0
+type: Opaque
+data:
+  mariadb-root-password: "cGFzc3dvcmQ="
+  mariadb-password: "cGFzc3dvcmQ="
+---
+# Source: redcap-helm/templates/secret-redcap.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: redcap-test-mariadb-secret
+  namespace: default
+type: Opaque
+data:
+  username: "cmVkY2FwX3VzZXI="
+  password: "cGFzc3dvcmQ="
+---
+# Source: redcap-helm/charts/mariadb/templates/primary/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redcap-test-mariadb
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: redcap-test
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: mariadb
+    app.kubernetes.io/version: 11.4.3
+    helm.sh/chart: mariadb-19.1.0
+    app.kubernetes.io/component: primary
+data:
+  my.cnf: |-
+    [mysqld]
+    skip-name-resolve
+    explicit_defaults_for_timestamp
+    basedir=/opt/bitnami/mariadb
+    datadir=/bitnami/mariadb/data
+    plugin_dir=/opt/bitnami/mariadb/plugin
+    port=3306
+    socket=/opt/bitnami/mariadb/tmp/mysql.sock
+    tmpdir=/opt/bitnami/mariadb/tmp
+    max_allowed_packet=16M
+    bind-address=*
+    pid-file=/opt/bitnami/mariadb/tmp/mysqld.pid
+    log-error=/opt/bitnami/mariadb/logs/mysqld.log
+    character-set-server=UTF8
+    collation-server=utf8_general_ci
+    slow_query_log=0
+    long_query_time=10.0
+    binlog_expire_logs_seconds=2592000
+    
+    [client]
+    port=3306
+    socket=/opt/bitnami/mariadb/tmp/mysql.sock
+    default-character-set=UTF8
+    plugin_dir=/opt/bitnami/mariadb/plugin
+    
+    [manager]
+    port=3306
+    socket=/opt/bitnami/mariadb/tmp/mysql.sock
+    pid-file=/opt/bitnami/mariadb/tmp/mysqld.pid
+---
+# Source: redcap-helm/charts/mariadb/templates/primary/initialization-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redcap-test-mariadb-init-scripts
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: redcap-test
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: mariadb
+    app.kubernetes.io/version: 11.4.3
+    helm.sh/chart: mariadb-19.1.0
+    app.kubernetes.io/component: primary
+data:
+  redcap-db-init.sh: |
+    #!/bin/sh
+    if [[ $(hostname) == *primary* ]]; then
+      echo "Primary node"
+      mysql -P 3306 -uroot -p"${MARIADB_ROOT_PASSWORD}" -e "CREATE DATABASE IF NOT EXISTS \`${MARIADB_DATABASE}\`; \
+      CREATE USER IF NOT EXISTS '${MARIADB_USER}'@'%' IDENTIFIED BY '${MARIADB_PASSWORD}'; \
+      GRANT SELECT, INSERT, UPDATE, DELETE ON \`${MARIADB_DATABASE}\`.* TO '${MARIADB_USER}'@'%'; \
+      FLUSH PRIVILEGES;";
+    else
+      echo "No primary node"
+    fi
+---
+# Source: redcap-helm/templates/cm-redcap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redcap-test-rc
+  namespace: default
+data:
+  msmtprc-ini: |
+    sendmail_path = "/usr/bin/msmtp -C /etc/msmtprc -t"
+    
+    
+  msmtprc: |
+    # Mailhog localhsot settings
+    account default
+    host redcap-test-mailhog-service
+    port 1025
+    from eric@{{ .Release.Name }}.local
+    tls off
+    tls_starttls off
+    logfile /var/log/msmtp.log
+    # cloud/ k8s/ no mailhog settings
+    
+    
+  info.php: |
+    <?php
+      phpinfo();
+    ?>
+    
+    
+  database.php: |
+    <?php
+    global $log_all_errors;
+    $log_all_errors = FALSE;
+    
+    $hostname   = "redcap-test-mariadb";
+    $db         = "redcap";
+    $username   = "redcap_user";
+    $password   = "password";
+    
+    $salt = "kwgHjqknvx8Ctcvz";
+    ?>
+---
+# Source: redcap-helm/templates/pvc-rc.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: redcap-pvc
+  namespace: default
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+  storageClassName: local-path  # Use the local-path storage class for provisioning
+---
+# Source: redcap-helm/charts/mariadb/templates/primary/svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: redcap-test-mariadb
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: redcap-test
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: mariadb
+    app.kubernetes.io/version: 11.4.3
+    helm.sh/chart: mariadb-19.1.0
+    app.kubernetes.io/component: primary
+  annotations:
+spec:
+  type: ClusterIP
+  sessionAffinity: None
+  ports:
+    - name: mysql
+      port: 3306
+      protocol: TCP
+      targetPort: mysql
+      nodePort: null
+  selector:
+    app.kubernetes.io/instance: redcap-test
+    app.kubernetes.io/name: mariadb
+    app.kubernetes.io/component: primary
+---
+# Source: redcap-helm/templates/svc-adminer.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: redcap-test-adminer-service
+  namespace: default
+  labels:
+    app.kubernetes.io/name: adminer
+    app.kubernetes.io/instance: redcap-test
+spec:
+  selector:
+    app.kubernetes.io/name: adminer
+    app.kubernetes.io/instance: redcap-test
+  ports:
+    - protocol: TCP
+      port: 8080
+      targetPort: 8080
+  type: ClusterIP
+---
+# Source: redcap-helm/templates/svc-mailhog.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: redcap-test-mailhog-service
+  namespace: default
+  labels:
+    app.kubernetes.io/name: mailhog
+    app.kubernetes.io/instance: redcap-test
+spec:
+  selector:
+    app.kubernetes.io/name: mailhog
+    app.kubernetes.io/instance: redcap-test
+  ports:
+    - name: web
+      protocol: TCP
+      port: 8025
+      targetPort: 8025
+    - name: email
+      protocol: TCP
+      port: 1025
+      targetPort: 1025
+  type: ClusterIP
+---
+# Source: redcap-helm/templates/svc-redcap-web.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: redcap-test-redcap-service
+  namespace: default
+  labels:
+    app.kubernetes.io/name: redcap
+    app.kubernetes.io/instance: redcap-test
+spec:
+  selector:
+    app.kubernetes.io/name: redcap
+    app.kubernetes.io/instance: redcap-test
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8080
+  type: ClusterIP
+---
+# Source: redcap-helm/templates/dep-adminer.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redcap-test-adminer
+  namespace: default
+  labels:
+    app.kubernetes.io/name: adminer
+    app.kubernetes.io/instance: redcap-test
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: adminer
+      app.kubernetes.io/instance: redcap-test
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: adminer
+        app.kubernetes.io/instance: redcap-test
+    spec:
+      containers:
+        - name: adminer
+          image: adminer:latest
+          ports:
+            - containerPort: 8080
+---
+# Source: redcap-helm/templates/dep-mailhog.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redcap-test-mailhog
+  namespace: default
+  labels:
+    app.kubernetes.io/name: mailhog
+    app.kubernetes.io/instance: redcap-test
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: mailhog
+      app.kubernetes.io/instance: redcap-test
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: mailhog
+        app.kubernetes.io/instance: redcap-test
+    spec:
+      containers:
+        - name: mailhog
+          image: mailhog/mailhog:latest
+          ports:
+            - containerPort: 8025
+            - containerPort: 1025
+---
+# Source: redcap-helm/templates/dep-redcap-web.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redcap-test-redcap
+  namespace: default
+  labels: 
+    app.kubernetes.io/name: redcap
+    app.kubernetes.io/instance: redcap-test
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: redcap
+      app.kubernetes.io/instance: redcap-test
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: redcap
+        app.kubernetes.io/instance: redcap-test
+    spec:
+      securityContext:
+        runAsUser: 48
+        runAsGroup: 48
+      containers:
+        - name: rc-web
+          image: redcap-dev:5000/rc-test:v2
+          ports:
+            - containerPort: 8080
+          volumeMounts:
+            - name: redcap-configs
+              mountPath: /etc/msmtprc
+              subPath: msmtprc
+            - name: redcap-configs
+              mountPath: /var/www/html/redcap/info.php
+              subPath: info.php
+              readOnly: true
+            - name: redcap-configs
+              mountPath: /var/www/html/redcap/database.php
+              subPath: database.php
+              readOnly: true
+      volumes:
+        - name: redcap-configs
+          configMap:
+            name: redcap-test-rc  # Update to match the templated ConfigMap name
+---
+# Source: redcap-helm/charts/mariadb/templates/primary/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redcap-test-mariadb
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: redcap-test
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: mariadb
+    app.kubernetes.io/version: 11.4.3
+    helm.sh/chart: mariadb-19.1.0
+    app.kubernetes.io/component: primary
+spec:
+  replicas: 1
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: redcap-test
+      app.kubernetes.io/name: mariadb
+      app.kubernetes.io/component: primary
+  serviceName: redcap-test-mariadb
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      annotations:
+        checksum/configuration: 192596a08b5d4e789970681775e8ee4e44a0b15080285502ce56a58de213d167
+      labels:
+        app.kubernetes.io/instance: redcap-test
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/name: mariadb
+        app.kubernetes.io/version: 11.4.3
+        helm.sh/chart: mariadb-19.1.0
+        app.kubernetes.io/component: primary
+    spec:
+      
+      automountServiceAccountToken: false
+      serviceAccountName: redcap-test-mariadb
+      affinity:
+        podAffinity:
+          
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/instance: redcap-test
+                    app.kubernetes.io/name: mariadb
+                    app.kubernetes.io/component: primary
+                topologyKey: kubernetes.io/hostname
+              weight: 1
+        nodeAffinity:
+          
+      securityContext:
+        fsGroup: 1001
+        fsGroupChangePolicy: Always
+        supplementalGroups: []
+        sysctls: []
+      initContainers:
+        - name: preserve-logs-symlinks
+          image: docker.io/bitnami/mariadb:11.4.3-debian-12-r1
+          imagePullPolicy: "IfNotPresent"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            privileged: false
+            readOnlyRootFilesystem: true
+            runAsGroup: 1001
+            runAsNonRoot: true
+            runAsUser: 1001
+            seLinuxOptions: {}
+            seccompProfile:
+              type: RuntimeDefault
+          resources:
+            limits:
+              cpu: 375m
+              ephemeral-storage: 2Gi
+              memory: 384Mi
+            requests:
+              cpu: 250m
+              ephemeral-storage: 50Mi
+              memory: 256Mi
+          command:
+            - /bin/bash
+          args:
+            - -ec
+            - |
+              #!/bin/bash
+
+              . /opt/bitnami/scripts/libfs.sh
+              # We copy the logs folder because it has symlinks to stdout and stderr
+              if ! is_dir_empty /opt/bitnami/mariadb/logs; then
+                cp -r /opt/bitnami/mariadb/logs /emptydir/app-logs-dir
+              fi
+          volumeMounts:
+            - name: empty-dir
+              mountPath: /emptydir
+      containers:
+        - name: mariadb
+          image: docker.io/bitnami/mariadb:11.4.3-debian-12-r1
+          imagePullPolicy: "IfNotPresent"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            privileged: false
+            readOnlyRootFilesystem: true
+            runAsGroup: 1001
+            runAsNonRoot: true
+            runAsUser: 1001
+            seLinuxOptions: {}
+            seccompProfile:
+              type: RuntimeDefault
+          env:
+            - name: BITNAMI_DEBUG
+              value: "false"
+            - name: MARIADB_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: redcap-test-mariadb
+                  key: mariadb-root-password
+            - name: MARIADB_USER
+              value: "redcap_user"
+            - name: MARIADB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: redcap-test-mariadb
+                  key: mariadb-password
+            - name: MARIADB_DATABASE
+              value: "redcap"
+          ports:
+            - name: mysql
+              containerPort: 3306
+          livenessProbe:
+            failureThreshold: 3
+            initialDelaySeconds: 120
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 1
+            exec:
+              command:
+                - /bin/bash
+                - -ec
+                - |
+                  password_aux="${MARIADB_ROOT_PASSWORD:-}"
+                  if [[ -f "${MARIADB_ROOT_PASSWORD_FILE:-}" ]]; then
+                      password_aux=$(cat "$MARIADB_ROOT_PASSWORD_FILE")
+                  fi
+                  mariadb-admin status -uroot -p"${password_aux}"
+          readinessProbe:
+            failureThreshold: 3
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            successThreshold: 1
+            timeoutSeconds: 1
+            exec:
+              command:
+                - /bin/bash
+                - -ec
+                - |
+                  password_aux="${MARIADB_ROOT_PASSWORD:-}"
+                  if [[ -f "${MARIADB_ROOT_PASSWORD_FILE:-}" ]]; then
+                      password_aux=$(cat "$MARIADB_ROOT_PASSWORD_FILE")
+                  fi
+                  mariadb-admin ping -uroot -p"${password_aux}"
+          resources:
+            limits:
+              cpu: 375m
+              ephemeral-storage: 2Gi
+              memory: 384Mi
+            requests:
+              cpu: 250m
+              ephemeral-storage: 50Mi
+              memory: 256Mi
+          volumeMounts:
+            - name: data
+              mountPath: /bitnami/mariadb
+            - name: custom-init-scripts
+              mountPath: /docker-entrypoint-initdb.d
+            - name: config
+              mountPath: /opt/bitnami/mariadb/conf/my.cnf
+              subPath: my.cnf
+            - name: empty-dir
+              mountPath: /tmp
+              subPath: tmp-dir
+            - name: empty-dir
+              mountPath: /opt/bitnami/mariadb/conf
+              subPath: app-conf-dir
+            - name: empty-dir
+              mountPath: /opt/bitnami/mariadb/tmp
+              subPath: app-tmp-dir
+            - name: empty-dir
+              mountPath: /opt/bitnami/mariadb/logs
+              subPath: app-logs-dir
+      volumes:
+        - name: empty-dir
+          emptyDir: {}
+        - name: config
+          configMap:
+            name: redcap-test-mariadb
+        - name: custom-init-scripts
+          configMap:
+            name: redcap-test-mariadb-init-scripts
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        labels:
+          app.kubernetes.io/instance: redcap-test
+          app.kubernetes.io/name: mariadb
+          app.kubernetes.io/component: primary
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: "10Gi"
+---
+# Source: redcap-helm/templates/cj-redcap.yaml
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: redcap-test-curl-cronjob
+  namespace: default
+spec:
+  schedule: "*/5 * * * *"
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+            - name: curl-container
+              image: curlimages/curl:latest
+              args:
+                - "-s"
+                - "http://redcap-test-web.default.svc.cluster.local/redcap/cron.php"
+          restartPolicy: OnFailure
+---
+# Source: redcap-helm/templates/ing-mailhog.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: redcap-test-mailhog-ingress
+  namespace: default
+  labels:
+    app.kubernetes.io/name: mailhog
+    app.kubernetes.io/instance: redcap-test
+  annotations:
+    ingressClassName: traefik
+    traefik.ingress.kubernetes.io/router.entrypoints: web
+spec:
+  rules:
+    - host: mailhog.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: redcap-test-mailhog-service
+                port:
+                  number: 8025
+---
+# Source: redcap-helm/templates/ing-redcap.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: redcap-test-adminer-ingress
+  namespace: default
+  labels:
+    app.kubernetes.io/name: adminer
+    app.kubernetes.io/name: redcap
+    app.kubernetes.io/instance: redcap-test
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: web
+    ingressClassName: traefik
+spec:
+  rules:
+    - host: redcap.local
+      http:
+        paths:
+          - path: /redcap
+            pathType: Prefix
+            backend:
+              service:
+                name: redcap-test-redcap-service
+                port:
+                  number: 80
+          - path: /adminer
+            pathType: Prefix
+            backend:
+              service:
+                name: redcap-test-adminer-service
+                port:
+                  number: 8080
+

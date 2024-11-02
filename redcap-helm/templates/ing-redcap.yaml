@@ -1,0 +1,33 @@
+{{- if and .Values.ingress.enabled .Values.adminer.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ .Release.Name }}-adminer-ingress
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: adminer
+    app.kubernetes.io/name: redcap
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: web
+    ingressClassName: traefik
+spec:
+  rules:
+    - host: {{ .Values.ingress.host }}
+      http:
+        paths:
+          - path: /redcap
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ .Release.Name }}-redcap-service
+                port:
+                  number: 80
+          - path: /adminer
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ .Release.Name }}-adminer-service
+                port:
+                  number: 8080
+{{- end }}

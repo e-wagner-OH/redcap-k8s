@@ -1,0 +1,146 @@
+replicaCount: 1
+securityContext:
+  runAsUser: 48
+  runAsGroup: 48
+container:
+  name: rc-web
+  image: redcap-dev:5000/rc-test:v2
+  port: 8080
+configMapName: cm-rc-web
+ingress:
+  enabled: true  # Set to true to enable ingresses for Redcap, adminer, and Mailhog (if enabled)
+  host: redcap.local
+
+service:
+  port: 80
+  type: ClusterIP
+
+debug:
+  enabled: true  # Set to true to add the Netshoot debug container
+  image: nicolaka/netshoot
+  command: ["/bin/bash"]
+  args: ["-c", "while true; do ping localhost; sleep 60; done"]
+
+email:
+  enabled: false
+  host: "{{ .Release.Name }}.local"
+  port: 587
+  from: "eric@{{ .Release.Name }}.local"
+  tls: off
+  tls_starttls: off
+
+mailhog:
+  enabled: true  # Set to true to enable Mailhog deployment and service
+  ingress:
+    host: mailhog.local
+  replicas: 1
+  image: mailhog/mailhog:latest
+  service:
+    type: ClusterIP
+    ports:
+      web:
+        port: 8025
+        targetPort: 8025
+      email:
+        port: 1025
+        targetPort: 1025
+
+adminer:
+  ingress:
+    host: adminer.local
+  enabled: true  # Set to true to deploy Adminer
+  replicaCount: 1
+  image: adminer:latest
+  servicePort: 8080
+  containerPort: 8080
+
+cronjob:
+  enabled: true  # Set to true to deploy the CronJob
+  schedule: "*/5 * * * *"
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  image: curlimages/curl:latest
+
+mariadb:
+  enabled: true
+  salt: kwgHjqknvx8Ctcvz
+  auth:
+    rootPassword: "password"  # Set the root password for MariaDB
+    username: redcap_user      # Application username
+    password: password         # Application password
+    database: redcap           # Database name
+
+  # Specify the initialization script using initdbScripts
+  initdbScripts:
+    redcap-db-init.sh: |
+      #!/bin/sh
+      if [[ $(hostname) == *primary* ]]; then
+        echo "Primary node"
+        mysql -P 3306 -uroot -p"${MARIADB_ROOT_PASSWORD}" -e "CREATE DATABASE IF NOT EXISTS \`${MARIADB_DATABASE}\`; \
+        CREATE USER IF NOT EXISTS '${MARIADB_USER}'@'%' IDENTIFIED BY '${MARIADB_PASSWORD}'; \
+        GRANT SELECT, INSERT, UPDATE, DELETE ON \`${MARIADB_DATABASE}\`.* TO '${MARIADB_USER}'@'%'; \
+        FLUSH PRIVILEGES;";
+      else
+        echo "No primary node"
+      fi
+
+  primary:
+    image:
+      registry: docker.io
+      repository: mariadb
+      tag: 10.5
+
+    # Persistence settings
+    persistence:
+      enabled: true
+      accessModes:
+        - ReadWriteOnce
+      size: 10Gi
+
+    # Readiness probe
+    readinessProbe:
+      enabled: true
+      initialDelaySeconds: 10
+      periodSeconds: 5
+
+config:
+  logErrors: false
+  msmtprc_ini: |
+    sendmail_path = "/usr/bin/msmtp -C /etc/msmtprc -t"
+  msmtprc: |
+    # Mailhog localhsot settings
+    {{- if and (not .Values.email.enabled) .Values.mailhog.enabled }}
+    account default
+    host {{ .Release.Name }}-mailhog-service
+    port {{ .Values.mailhog.service.ports.email.port }}
+    from {{ .Values.email.from | default "redcap@redcap.local" }}
+    tls {{ .Values.email.tls | default "off" }}
+    tls_starttls {{ .Values.email.tls_starttls | default "off" }}
+    logfile /var/log/msmtp.log
+    # cloud/ k8s/ no mailhog settings
+    {{- else if and .Values.email.enabled (not .Values.mailhog.enabled) }}
+    account default
+    host {{ .Values.email.host | default "smtp.example.com" }}
+    port {{ .Values.email.port | default 587 }}
+    from {{ .Values.email.from | default "redcap@redcap.local" }}
+    tls {{ .Values.email.tls | default "on" }}
+    tls_starttls {{ .Values.email.tls_starttls | default "on" }}
+    logfile /var/log/msmtp.log
+    {{- end }}
+  info_php: |
+    <?php
+      phpinfo();
+    ?>
+  database_php: |
+    <?php
+    global $log_all_errors;
+    $log_all_errors = {{ if .Values.config.logErrors }}TRUE{{ else }}FALSE{{ end }};
+
+    $hostname   = "{{ .Values.mariadb.primary.service.name | default (printf "%s-mariadb" .Release.Name) }}";
+    $db         = "{{ .Values.mariadb.auth.database | default "redcap" }}";
+    $username   = "{{ .Values.mariadb.auth.username | default "redcap_user" }}";
+    $password   = "{{ .Values.mariadb.auth.password | default "password" }}";
+
+    $salt = "{{ .Values.mariadb.salt | default "kwgHjqknvx8Ctcvz" }}";
+    ?>
+

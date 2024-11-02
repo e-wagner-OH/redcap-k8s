@@ -1,3 +1,11 @@
+# todo
+
+- [ ] some kind of stream logs service for errors from the redcap deployment, off of redcap.local/logs
+- [ ] edocs volume and pvc
+- [ ] host path pv/ storageClass that works in k3d, docker desktop defaults, and rancher desktop defaults
+- [ ] sql init script updates that REDCap db with changes or defaults from the helm chart (ex: the edocs dir, name of site, default users, etc)
+- [ ] heml chart flags to support windows paths and mac paths for local deployment
+
 ### Debugging
 
 If you need to use a local image, you have to import it into your k3d cluster registry

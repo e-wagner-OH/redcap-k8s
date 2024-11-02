@@ -1,0 +1,28 @@
+{{- if .Values.mailhog.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-mailhog
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: mailhog
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  replicas: {{ .Values.mailhog.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: mailhog
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: mailhog
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      containers:
+        - name: mailhog
+          image: {{ .Values.mailhog.image }}
+          ports:
+            - containerPort: {{ .Values.mailhog.service.ports.web.targetPort }}
+            - containerPort: {{ .Values.mailhog.service.ports.email.targetPort }}
+{{- end }}

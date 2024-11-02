@@ -1,0 +1,542 @@
+---
+# Source: redcap-helm/templates/secrets-redcap.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mariadb-secret
+  namespace: default
+type: Opaque
+data:
+  username: cmVkY2FwX3VzZXI= # echo -n "redcap_user" | base64
+  password: cGFzc3dvcmQ=  # echo -n "password" | base64
+---
+# Source: redcap-helm/templates/cm-redcap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cm-rc-web
+  namespace: default
+data:
+  msmtprc-ini: |
+    sendmail_path = "/usr/bin/msmtp -C /etc/msmtprc -t"
+  msmtprc: |
+    account default
+    host mailhog-service.default.svc.cluster.local
+    port 1025
+    from k8s-redcap@derp.biz
+    tls off
+    tls_starttls off
+    logfile /var/log/msmtp.log
+  install.php: |
+    <?php 
+    /*****************************************************************************************
+    **  REDCap is only available through a license agreement with Vanderbilt University
+    ******************************************************************************************/
+
+    // Turn off error reporting
+    error_reporting(0);
+
+    // Prevent caching
+    header("Expires: 0");
+    header("cache-control: no-store, no-cache, must-revalidate"); 
+    header("Pragma: no-cache");
+
+    // Find the highest numbered REDCap version folder in this directory
+    $files = array();
+    $dh    = opendir(dirname(__FILE__));
+    while (($filename = readdir($dh)) !== false) 
+    {
+      if (substr($filename, 0, 8) == "redcap_v") 
+      {
+        // Store version and numerical represetation of version in array to determine highest
+        $this_version = substr($filename, 8);
+        list ($v1, $v2, $v3) = explode(".", $this_version, 3);
+        $this_version_numerical = sprintf("%02d%02d%02d", $v1, $v2, $v3);
+        $files[$this_version_numerical] = $this_version;
+      }
+    }
+    if (empty($files))
+    {
+      exit("No REDCap directories found. Please install the REDCap software and try again.");
+    }
+    // Find the highest numbered key from the array and get its value
+    ksort($files, SORT_NUMERIC);
+    $install_version = array_pop($files);
+    // Call the file in the REDCap version directory
+    include dirname(__FILE__) . DIRECTORY_SEPARATOR . "redcap_v" . $install_version . DIRECTORY_SEPARATOR . "install.php";
+
+  info.php: |
+    <?php
+      phpinfo();
+    ?>
+  database.php: |
+    <?php
+    /**
+    * Set this variable to TRUE if you are having problems and need to see as much error logging information as
+    * possible. This will cause all errors/warnings/notices to be logged to your web server's error log. Once
+    * the issue has been resolved, we recommend setting this back to FALSE to avoid unnecessary logging of warnings.
+    */
+    global $log_all_errors;
+    $log_all_errors = FALSE;
+
+    //********************************************************************************************************************
+    // MYSQL DATABASE CONNECTION:
+    // Replace the values inside the single quotes below with the values for your MySQL configuration. 
+    // If not using the default port 3306, then append a colon and port number to the hostname (e.g. $hostname = 'example.com:3307';).
+
+    $hostname   = 'mariadb-service';
+    $db     	= 'redcap';
+    $username   = 'redcap_user';
+    $password   = 'password';
+
+    // You may optionally utilize a database connection over SSL/TLS for improved security. To do so, at minimum
+    // you must provide the path of the key file, the certificate file, and certificate authority file.
+    // $db_ssl_key  	= '';		// e.g., '/etc/mysql/ssl/client-key.pem'
+    // $db_ssl_cert 	= '';		// e.g., '/etc/mysql/ssl/client-cert.pem'
+    // $db_ssl_ca   	= '';		// e.g., '/etc/mysql/ssl/ca-cert.pem'
+    // $db_ssl_capath 	= NULL;
+    // $db_ssl_cipher 	= NULL;
+    // $db_ssl_verify_server_cert = false; // Set to TRUE to force the database connection to verify the SSL certificate
+
+    // For greater security, you may instead want to place the database connection values in a separate file that is not 
+    // accessible via the web. To do this, uncomment the line below and set it as the path to your database connection file
+    // located elsewhere on your web server. The file included should contain all the variables from above.
+
+    // include 'path_to_db_conn_file.php';
+
+
+    //********************************************************************************************************************
+    // SALT VARIABLE:
+    // Add a random value for the $salt variable below, preferably alpha-numeric with 8 characters or more. This value wll be 
+    // used for data de-identification hashing for data exports. Do NOT change this value once it has been initially set.
+
+    $salt = 'kwgHjqknvx8Ctcvz';
+
+
+    //********************************************************************************************************************
+    // DATA TRANSFER SERVICES (DTS):
+    // If using REDCap DTS, uncomment the lines below and provide the database connection values for connecting to
+    // the MySQL database containing the DTS tables (even if the same as the values above).
+
+    // $dtsHostname 	= 'your_dts_host_name';
+    // $dtsDb 			= 'your_dts_db_name';
+    // $dtsUsername 	= 'your_dts_db_username';
+    // $dtsPassword 	= 'your_dts_db_password';
+  init_redcap_db.sql: |
+    CREATE DATABASE IF NOT EXISTS `redcap`;
+    CREATE USER IF NOT EXISTS 'redcap_user'@'%' IDENTIFIED BY 'password';
+    GRANT SELECT, INSERT, UPDATE, DELETE ON `redcap`.* TO 'redcap_user'@'%';
+    FLUSH PRIVILEGES;
+  rc_db_setup.sql: |
+    
+  APP_CONFIG_1: "value1"
+  APP_CONFIG_2: "value2"
+
+# ref to an info.php
+---
+# Source: redcap-helm/templates/pvc-rc.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: redcap-pvc
+  namespace: default
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+  storageClassName: local-path  # Use the local-path storage class for provisioning
+---
+# Source: redcap-helm/templates/svc-adminer.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: adminer-service
+  namespace: default
+spec:
+  selector:
+    app: adminer
+  ports:
+    - protocol: TCP
+      port: 8080
+      targetPort: 8080
+  type: ClusterIP
+---
+# Source: redcap-helm/templates/svc-mailhog.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: mailhog-service
+  namespace: default
+spec:
+  selector:
+    app: mailhog
+  ports:
+    - name: web
+      protocol: TCP
+      port: 8025
+      targetPort: 8025
+    - name: email
+      protocol: TCP
+      port: 1025
+      targetPort: 1025
+  type: ClusterIP
+---
+# Source: redcap-helm/templates/svc-mariadb.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: mariadb-service
+  namespace: default
+spec:
+  selector:
+    app: mariadb
+  ports:
+    - protocol: TCP
+      port: 3306
+      targetPort: 3306
+  type: ClusterIP
+---
+# Source: redcap-helm/templates/svc-redcap-web.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: noah-svc
+  namespace: default
+spec:
+  selector:
+    app: rc-web
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8080
+  type: ClusterIP
+---
+# Source: redcap-helm/templates/debug.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: debug-pod
+  namespace: default
+spec:
+  containers:
+    - name: debug-container
+      image: busybox
+      command: ["sleep", "120"]  # Keeps the pod running for debugging
+      # volumeMounts:
+      #   - name: init-scripts
+      #     mountPath: /docker-entrypoint-initdb.d/init-redcap-db.sql
+      #     subPath: init_redcap_db.sql
+  # volumes:
+  #   - name: init-scripts
+  #     configMap:
+  #       name: cm-rc-web
+---
+# Source: redcap-helm/templates/dep-adminer.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: adminer
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: adminer
+  template:
+    metadata:
+      labels:
+        app: adminer
+    spec:
+      containers:
+      - name: adminer
+        image: adminer:latest
+        ports:
+        - containerPort: 8080
+---
+# Source: redcap-helm/templates/dep-mailhog.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dep-mailhog
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mailhog
+  template:
+    metadata:
+      labels:
+        app: mailhog
+    spec:
+      containers:
+      - name: mailhog
+        image: mailhog/mailhog:latest
+        ports:
+        - containerPort: 8025
+        - containerPort: 1025
+---
+# Source: redcap-helm/templates/dep-redcap-web.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dep-redcap-web
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rc-web
+  template:
+    metadata:
+      labels:
+        app: rc-web
+    spec:
+      securityContext:
+        runAsUser: 48
+        runAsGroup: 48
+      containers:
+      - name: rc-web
+        image: redcap-dev:5000/rc-test:v2
+        ports:
+        - containerPort: 8080
+        volumeMounts:
+        - name: redcap-configs
+          mountPath: /usr/local/etc/php/conf.d/msmtprc.ini
+          subPath: msmtprc-ini
+        - name: redcap-configs
+          mountPath: /etc/msmtprc
+          subPath: msmtprc
+        - name: redcap-configs
+          mountPath: /var/www/html/redcap/info.php
+          subPath: info.php
+          readOnly: true
+        - name: redcap-configs
+          mountPath: /var/www/html/redcap/database.php
+          subPath: database.php
+          readOnly: true
+        - name: redcap-configs
+          mountPath: /var/www/html/redcap/install.php
+          subPath: install.php
+          readOnly: true
+        - name: redcap-storage
+          mountPath: /config
+      volumes:
+      - name: redcap-configs
+        configMap:
+          name: cm-rc-web
+      - name: redcap-storage
+        emptyDir: {}
+---
+# Source: redcap-helm/templates/sts-mariadb.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mariadb
+  namespace: default
+spec:
+  serviceName: "mariadb"
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mariadb
+  template:
+    metadata:
+      labels:
+        app: mariadb
+    spec:
+      containers:
+      - name: mariadb
+        image: mariadb:10.5
+        ports:
+        - containerPort: 3306
+        readinessProbe:
+          exec:
+            command:
+              - mysqladmin
+              - ping
+              - "-h"
+              - "localhost"
+          initialDelaySeconds: 10
+          periodSeconds: 5
+        env:
+        - name: MARIADB_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mariadb-secret
+              key: password
+        - name: MARIADB_USER
+          valueFrom:
+            secretKeyRef:
+              name: mariadb-secret
+              key: username
+        - name: MARIADB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mariadb-secret
+              key: password
+        volumeMounts:
+        - name: data
+          mountPath: /var/lib/mysql  # This is the default MariaDB data directory
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      resources:
+        requests:
+          storage: 10Gi
+---
+# Source: redcap-helm/templates/job-init-db.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: job-init-redcap-db
+  namespace: default
+spec:
+  completions: 1  # The Job only needs to complete successfully once
+  backoffLimit: 3  # If the Job fails, it will retry up to 3 times
+  template:
+    spec:
+      containers:
+      - name: sql-script-runner
+        image: mariadb:10.5
+        env:
+          - name: MARIADB_ROOT_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: mariadb-secret
+                key: password
+        volumeMounts:
+          - name: cm-mariadb
+            mountPath: /tmp/init-redcap-db.sql
+            subPath: init_redcap_db.sql
+        command: ["/bin/sh", "-c", "sleep 20 && mysql -h mariadb-service -u root -p${MARIADB_ROOT_PASSWORD} < /tmp/init-redcap-db.sql && echo 'Script completed'"]
+      restartPolicy: OnFailure
+      volumes:
+      - name: cm-mariadb
+        configMap:
+          name: cm-rc-web
+---
+# Source: redcap-helm/templates/cj-redcap.yaml
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: curl-cronjob
+  namespace: default
+spec:
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  schedule: "*/5 * * * *"  # Run every 5 minutes
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: curl-container
+            image: curlimages/curl:latest
+            args:
+            - "-s"
+            - "http://svc-rc-web/redcap/cron.php"
+          restartPolicy: OnFailure
+---
+# Source: redcap-helm/templates/cron-redcap.yaml
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: php-app-cronjob
+  namespace: default
+spec:
+  schedule: "0 0 * * *"  # Runs daily at midnight
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: php-cronjob
+            image: php:8.0-cli
+            command: ["/bin/sh", "-c", "php /var/www/html/script.php"]
+          restartPolicy: OnFailure
+
+
+# RUN sed -i -e '/pam_loginuid.so/s/^/#/' /etc/pam.d/cron && \
+#     chmod 0644 /etc/crontab && \
+#     echo "* * * * * /usr/local/bin/php /var/www/html/redcap/cron.php >> /tmp/cron.log 2>&1" >> /etc/cron.d/redcap-cron && \
+#     crontab -u apache /etc/cron.d/redcap-cron && \
+#     chmod u+s /usr/sbin/cron
+---
+# Source: redcap-helm/templates/mailhog-ingress.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: mailhog-ingress
+  namespace: default
+  annotations:
+    kubernetes.io/ingress.class: traefik
+    traefik.ingress.kubernetes.io/router.entrypoints: web
+spec:
+  rules:
+  - host: mailhog.local
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: mailhog-service
+            port:
+              number: 8025
+---
+# Source: redcap-helm/templates/redcap-ingress.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: redcap-ingress
+  namespace: default
+  annotations:
+    # Use these annotations if you're using Traefik
+    traefik.ingress.kubernetes.io/router.entrypoints: web
+    kubernetes.io/ingress.class: traefik
+    # traefik.ingress.kubernetes.io/router.middlewares: default-mailhog-strip-prefix@kubernetescrd,default-mailhog-add-prefix@kubernetescrd
+spec:
+  rules:
+  - host: redcap.local
+    http:
+      paths:
+      - path: /redcap
+        pathType: Prefix
+        backend:
+          service:
+            name: svc-rc-web
+            port:
+              number: 80
+      - path: /adminer
+        pathType: Prefix
+        backend:
+          service:
+            name: adminer-service
+            port:
+              number: 8080
+---
+# Source: redcap-helm/templates/mailhog-add-prefix.yaml
+apiVersion: traefik.containo.us/v1alpha1
+kind: Middleware
+metadata:
+  name: mailhog-add-prefix
+  namespace: default
+spec:
+  addPrefix:
+    prefix: /mailhog
+---
+# Source: redcap-helm/templates/mailhog-strip-prefix.yaml
+apiVersion: traefik.containo.us/v1alpha1
+kind: Middleware
+metadata:
+  name: mailhog-strip-prefix
+  namespace: default
+spec:
+  stripPrefix:
+    prefixes:
+      - /mailhog

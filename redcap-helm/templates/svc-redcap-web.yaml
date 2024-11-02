@@ -1,11 +1,15 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ .Release.Name }}-web
+  name: {{ .Release.Name }}-redcap-service
   namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: redcap
+    app.kubernetes.io/instance: {{ .Release.Name }}
 spec:
   selector:
-    app: {{ .Values.appLabel }}
+    app.kubernetes.io/name: redcap
+    app.kubernetes.io/instance: {{ .Release.Name }}
   ports:
     - protocol: TCP
       port: {{ .Values.service.port }}

@@ -1,0 +1,25 @@
+{{- if and .Values.ingress.enabled .Values.mailhog.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ .Release.Name }}-mailhog-ingress
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: mailhog
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  annotations:
+    ingressClassName: traefik
+    traefik.ingress.kubernetes.io/router.entrypoints: web
+spec:
+  rules:
+    - host: {{ .Values.mailhog.ingress.host }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ .Release.Name }}-mailhog-service
+                port:
+                  number: 8025
+{{- end }}

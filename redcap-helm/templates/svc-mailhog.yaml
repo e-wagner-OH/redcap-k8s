@@ -1,0 +1,24 @@
+{{- if .Values.mailhog.enabled | default false }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-mailhog-service
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: mailhog
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  selector:
+    app.kubernetes.io/name: mailhog
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  ports:
+    - name: web
+      protocol: TCP
+      port: {{ .Values.mailhog.service.ports.web.port }}
+      targetPort: {{ .Values.mailhog.service.ports.web.targetPort }}
+    - name: email
+      protocol: TCP
+      port: {{ .Values.mailhog.service.ports.email.port }}
+      targetPort: {{ .Values.mailhog.service.ports.email.targetPort }}
+  type: {{ .Values.mailhog.service.type }}
+{{- end }}

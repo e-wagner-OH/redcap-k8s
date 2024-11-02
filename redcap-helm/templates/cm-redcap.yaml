@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-rc
+  namespace: {{ .Release.Namespace }}
+data:
+  msmtprc-ini: |
+    {{- if .Values.config.msmtprc_ini }}
+{{ tpl .Values.config.msmtprc_ini . | indent 4 }}
+    {{- end }}
+    
+  msmtprc: |
+    {{- if .Values.config.msmtprc }}
+{{ tpl .Values.config.msmtprc . | indent 4 }}
+    {{- end }}
+    
+  info.php: |
+    {{- if .Values.config.info_php }}
+{{ tpl .Values.config.info_php . | indent 4 }}
+    {{- end }}
+    
+  database.php: |
+    {{- if .Values.config.database_php }}
+{{ tpl .Values.config.database_php . | indent 4 }}
+    {{- end }}

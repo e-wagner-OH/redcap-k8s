@@ -18,10 +18,13 @@ spec:
         runAsGroup: 48
       containers:
       - name: rc-web
-        image: redcap-dev:5000/rc-test:v2
+        image: {{ .Values.container_image }}
         ports:
         - containerPort: 8080
         volumeMounts:
+        - name: redcap-configs
+          mountPath: /usr/local/etc/php/conf.d/msmtprc.ini
+          subPath: msmtprc-ini
         - name: redcap-configs
           mountPath: /etc/msmtprc
           subPath: msmtprc
