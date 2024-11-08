@@ -4,12 +4,12 @@ securityContext:
   runAsGroup: 48
 container:
   name: rc-web
-  image: redcap-dev:5000/rc-test:v2
+  image: redcap-dev:5000/rc-test:v3
   port: 8080
 configMapName: cm-rc-web
 ingress:
   enabled: true  # Set to true to enable ingresses for Redcap, adminer, and Mailhog (if enabled)
-  host: redcap.local
+  host: localhost
 
 service:
   port: 80
@@ -143,4 +143,69 @@ config:
 
     $salt = "{{ .Values.mariadb.salt | default "kwgHjqknvx8Ctcvz" }}";
     ?>
+  # CALL UpdateWithNewUserID('redcap_auth_17Oct2024', 'username');
+  redcap_ini: |
+    openssl.cafile=/etc/ssl/certs/ca-certificates.crt
+    openssl.capath=/etc/ssl/certs
+
+  rc_procedure: |
+    DELIMITER $$
+ 
+    DROP PROCEDURE IF EXISTS UpdateWithNewUserID;
+    CREATE PROCEDURE UpdateWithNewUserID(
+        IN input_table_name VARCHAR(255),  
+        IN column_to_update VARCHAR(255)   
+    )
+    BEGIN
+        DECLARE affected_rows INT DEFAULT 0;  
+        DECLARE sql_error INT DEFAULT 0;  -- Error handling variable
+    
+        -- Start transaction
+        START TRANSACTION;
+    
+        -- Set foreign key checks to 0
+        SET @sql = CONCAT('SET foreign_key_checks = 0; ');
+
+        -- Append the dynamic SQL to update the table
+        SET @sql = CONCAT(@sql,
+            'UPDATE ', input_table_name, ' t ',
+            'SET ', column_to_update, ' = concat(', column_to_update, ', ''@ohiohealth.com'') ',
+            'WHERE ', column_to_update, ' NOT LIKE ''%@ohiohealth.com'' ',  -- Ignore existing entries with ohiohealth.com
+            'AND ', column_to_update, ' NOT IN (SELECT username FROM redcaptest_new.redcap_user_information ',
+            'WHERE user_email NOT LIKE ''%ohiohealth.com'') ',
+            'AND ', column_to_update, ' NOT LIKE ''janice.rosenthal'' '  -- Ignore specific username
+        );
+    
+        -- Set foreign key checks to 1 after the update
+        SET @sql = CONCAT(@sql, '; SET foreign_key_checks = 1;');
+    
+        select @sql;
+    
+        -- Prepare and execute the dynamic SQL statement
+        PREPARE stmt FROM @sql;
+    
+        -- Execute and handle errors
+        BEGIN
+            DECLARE CONTINUE HANDLER FOR SQLEXCEPTION
+                SET sql_error = 1;
+    
+            EXECUTE stmt;
+            SET affected_rows = ROW_COUNT();
+        END;
+    
+        -- Check for errors
+        IF sql_error = 1 THEN
+            ROLLBACK;
+            SELECT 'Error occurred during update' AS error_message;
+        ELSE
+            COMMIT;
+            SELECT affected_rows AS rows_affected;
+        END IF;
+    
+        -- Deallocate the prepared statement
+        DEALLOCATE PREPARE stmt;
+    END $$
+    
+    DELIMITER ;
+
 

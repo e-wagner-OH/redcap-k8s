@@ -38,6 +38,10 @@ spec:
               mountPath: /var/www/html/redcap/database.php
               subPath: database.php
               readOnly: true
+            - name: redcap-configs
+              mountPath: /usr/local/etc/php/conf.d/redcap.ini
+              subPath: redcap.ini
+              readOnly: true
       volumes:
         - name: redcap-configs
           configMap:

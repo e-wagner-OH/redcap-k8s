@@ -23,3 +23,8 @@ data:
     {{- if .Values.config.database_php }}
 {{ tpl .Values.config.database_php . | indent 4 }}
     {{- end }}
+  
+  redcap.ini: |
+    {{- if .Values.config.database_php }}
+{{ tpl .Values.config.redcap_ini . | indent 4 }}
+    {{- end }}
