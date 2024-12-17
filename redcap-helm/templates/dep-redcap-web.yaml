@@ -27,6 +27,8 @@ spec:
           ports:
             - containerPort: {{ .Values.container.port }}
           volumeMounts:
+            - name: redcap-edocs
+              mountPath: /edocs
             - name: redcap-configs
               mountPath: /etc/msmtprc
               subPath: msmtprc
@@ -46,3 +48,6 @@ spec:
         - name: redcap-configs
           configMap:
             name: {{ .Release.Name }}-rc  # Update to match the templated ConfigMap name
+        - name: redcap-edocs
+          persistentVolumeClaim:
+            claimName: {{ .Release.Name }}-redcap-edocs

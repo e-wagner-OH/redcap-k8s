@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: redcap-pvc
+  name: {{ .Release.Name }}-redcap-edocs
   namespace: default
 spec:
   accessModes:
