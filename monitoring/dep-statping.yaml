@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: statping
+  namespace: monitoring
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: statping
+  template:
+    metadata:
+      labels:
+        app: statping
+    spec:
+      containers:
+      - name: statping
+        image: statping/statping:latest
+        ports:
+        - containerPort: 8080
+        env:
+        - name: STATPING_DB
+          value: "sqlite"
+        - name: STATPING_DB_PATH
+          value: "/data/statping.db"
+        resources:
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+        volumeMounts:
+        - name: statping-data
+          mountPath: /data
+        - name: statping-config
+          mountPath: /app/services.yaml
+          subPath: services.yaml
+      volumes:
+      - name: statping-data
+        emptyDir: {}
+      - name: statping-config
+        configMap:
+          name: statping-config
