@@ -2,6 +2,7 @@ apiVersion: opentelemetry.io/v1beta1
 kind: OpenTelemetryCollector
 metadata:
   name: simplest
+  namespace: monitoring
 spec:
   config:
     receivers:
@@ -11,6 +12,7 @@ spec:
             endpoint: 0.0.0.0:4317
           http:
             endpoint: 0.0.0.0:4318
+
     processors:
       memory_limiter:
         check_interval: 1s
@@ -23,7 +25,7 @@ spec:
     exporters:
       debug: {}
       prometheus:
-        endpoint: "http://prometheus-server.monitoring.svc.cluster.local:9090"
+        endpoint: "0.0.0.0:8889"  # Expose metrics on this endpoint
 
     service:
       pipelines:

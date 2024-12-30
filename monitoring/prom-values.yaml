@@ -813,7 +813,23 @@ serverFiles:
         static_configs:
           - targets:
             - localhost:9090
-
+      - job_name: 'otel-collector'
+        kubernetes_sd_configs:
+          - role: endpoints
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_service_name, __meta_kubernetes_namespace]
+            action: keep
+            regex: otel-collector;monitoring
+    #   prometheus.yml:
+#     global:
+#       scrape_interval: 15s
+#     scrape_configs:
+#       - job_name: 'node-exporter'
+#         static_configs:
+#           - targets: ['localhost:9100']
+#       - job_name: 'my_custom_app'
+#         static_configs:
+#           - targets: ['my-app-service:8080']
       # A scrape configuration for running Prometheus on a Kubernetes cluster.
       # This uses separate scrape configs for cluster components (i.e. API server, node)
       # and services to allow each to use different authentication configs.
